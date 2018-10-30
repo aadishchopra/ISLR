@@ -1,0 +1,1463 @@
+---
+title: "ISLR"
+author: "Aadish"
+date: "August 6, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE,cache=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Simple Linear Regression
+
+```{r warning=FALSE,message=FALSE}
+library("ISLR")
+library("car")
+library("MASS")
+library("leaps")
+library("glmnet")
+library("pls")
+library("splines")
+library("gam")
+library("akima")
+library("tree")
+library("randomForest")
+library("gbm")
+library("e1071")
+library("ROCR")
+
+lm_fit<-lm(medv~lstat,data=Boston)
+summary(lm_fit)
+
+attach(Boston)
+plot(lstat,medv)
+abline(lm_fit)
+
+par(mfrow=c(2,2))
+plot(lm_fit)
+
+
+```
+
+#Multiple Linear Regression
+
+```{r}
+
+
+lm_fit<-lm(medv~lstat+age,data=Boston)
+summary(lm_fit)
+
+
+lm_fit<-lm(medv~.,data=Boston)
+summary(lm_fit)
+vif(lm_fit)
+
+
+
+```
+
+
+#Non- Linear Transformation
+
+```{r}
+
+lm_fit1<-lm(medv~lstat+I(lstat^2))
+summary(lm_fit)
+plot(lm_fit1)
+
+
+
+```
+
+
+```{r}
+
+names(Carseats)
+
+lm_fit=lm(Sales~.+Income:Advertising+Price:Age,data=Carseats)
+summary(lm_fit)
+
+```
+
+```{r}
+
+names(Smarket)
+cor(Smarket[,-9])
+
+
+
+
+
+```
+
+#Logistic Regression
+
+fitting a logistic model to predict the direction of the market 
+
+
+```{r}
+
+attach(Smarket)
+glm_fit<-glm(Direction~.-Year-Direction-Today,data = Smarket,family = "binomial")
+summary(glm_fit)
+
+
+
+```
+
+
+```{r}
+
+glm_probs<-predict(glm_fit,type="response")
+glm_probs[1:10]
+
+
+contrasts(Direction)
+glm_pred<-rep("Down",1250)
+glm_pred[glm_probs>0.5]=="Up"
+sum(glm_pred==Direction)
+
+
+
+```
+
+#Linear Discriminant Analysis
+
+Using observations only before 2005 
+
+```{r}
+train<-(Year<2005)
+Smarket.2005<-Smarket[!train,]
+Direction.2005<-Direction[!train]
+
+lda_fit<-lda(Direction~Lag1+Lag2,data=Smarket,subset = train)
+lda_fit
+lda_pred<-predict(lda_fit,Smarket.2005)
+names(lda_pred)
+
+
+lda_class<-lda_pred$class
+table(lda_class,Direction.2005)
+lda_pred$posterior
+
+lda_pred$posterior[1:20,1]
+lda_class[1:20]
+
+
+```
+
+
+
+# Quadrant Discriminant Analysis
+
+
+```{r}
+qda_fit<-qda(Direction~Lag1+Lag2,data = Smarket,subset = train)
+qda_fit
+
+```
+
+# KNN
+
+```{r}
+library("class")
+train_X=cbind(Lag1,Lag2)[train,]
+test_X=cbind(Lag1,Lag2)[!train,]
+train_Direction=Direction[train]
+
+
+```
+
+
+
+```{r}
+set.seed(1)
+knn_pred<-knn(train_X,test_X,train_Direction,k=3)
+table(knn_pred,Direction.2005)
+
+```
+
+
+
+```{r}
+
+attach(Caravan)
+standardized_X=scale(Caravan[,-86])
+
+test=1:1000
+train_x=standardized_X[-test,]
+test_X=standardized_X[test,]
+
+train_Y=Purchase[-test]
+test_Y=Purchase[test]
+set.seed(1)
+
+knn_pred=knn(train_x,test_X,train_Y,k=1)
+mean(test_Y!=knn_pred)
+
+
+```
+#Sampling and Bootstrapping methods
+
+```{r}
+set.seed(1)
+train=sample(392,196)
+attach(Auto)
+lm_fit<-lm(mpg~horsepower,data=Auto,subset = train)
+mean((mpg- predict(lm_fit,Auto))[-train]^2)
+
+library("boot")
+glm_fit<-glm(mpg~horsepower,data = Auto)
+cv.err=cv.glm(Auto,glm_fit)
+cv.err$K
+
+```
+
+```{r}
+cv.error=rep(0,5)
+
+for(i in 1:5){
+  glm_fit<-glm(mpg~poly(horsepower,i),data = Auto)
+  cv.error[i]=cv.glm(Auto,glm_fit)$delta[i]
+}
+
+cv.error
+
+
+```
+
+
+###Bootstrap  
+
+```{r}
+
+alpha_fn=function(data,index){
+  X=data$X[index]
+  Y=data$Y[index]
+  return((var(Y)-cov(X,Y))/(var(X)+var(Y)-2*cov(X,Y)))
+}
+alpha_fn(Portfolio,1:100)
+boot(Portfolio,alpha_fn,R=1000)
+
+
+
+  
+
+
+
+```
+
+
+#Best Subset Selection Methods
+
+```{r}
+
+Hitters=na.omit(Hitters)
+regfit_full=regsubsets(Salary~.,Hitters)
+summary(regfit_full)
+
+
+```
+
+
+The number of stars indicate the importance of the variable. In the given configuration out of the 8 possible times that the iteration was run hits were found to be important all of the time whereas CRBI and PutOuts were found important 6 times
+
+```{r}
+regfit_full<-regsubsets(Salary~.,data = Hitters,nvmax = 19)
+reg_summary=summary(regfit_full)
+
+reg_summary$rsq
+
+par(mfrow=c(2,2))
+
+plot(reg_summary$rss,xlab="Number of variables",ylab="RSS",type="l")
+plot(reg_summary$adjr2,xlab="Number of variables",ylab="Adjusted Rsq",type="l")
+
+
+```
+
+```{r}
+
+which.max(reg_summary$adjr2)
+plot(regfit_full,scale="adjr2")
+points(11,reg_summary$adjr2[11],col="red",cex=2,pch=20)
+
+
+plot(regfit_full,scale="r2")
+
+
+
+
+
+```
+
+Forward and Backward Stepwise selection 
+
+```{r}
+
+regfit_fwd<-regsubsets(Salary~.,data = Hitters,nvmax = 19,method = "forward")
+summary(regfit_fwd)
+
+
+```
+
+```{r}
+set.seed(1)
+train=sample(c(TRUE,FALSE),nrow(Hitters),rep=TRUE)
+test=(!train)
+
+regfit_best=regsubsets(Salary~.,data=Hitters[train,],nvmax = 19)
+test_mat=model.matrix(Salary~.,data = Hitters[test,])
+
+val_errors=rep(NA,19)
+for(i in 1:19){
+  coefi=coef(regfit_best,id=i)
+  pred_test=test_mat[,names(coefi)] %*% coefi
+  val_errors[i]=mean((Hitters$Salary[test]-pred_test)^2)
+  
+  
+}
+
+val_errors
+
+```
+
+Since there is no predict function for regsubsets we are creating our own predict function
+
+
+```{r}
+predict_regsubsets<-function(object,newdata,id,...){
+  form=as.formula(object$call[[2]])
+  mat=model.matrix(form,newdata)
+  coefi=coef(object,id=id)
+  xvars=names(coefi)
+  mat[,xvars]%*% coefi
+  }
+
+
+```
+
+
+```{r}
+regfit_best=regsubsets(Salary~.,data=Hitters,nvmax=19)
+coef(regfit_best,10)
+
+k=10
+set.seed(1)
+folds=sample(1:k,nrow(Hitters),replace = TRUE)
+cv_errors=matrix(NA,k,19,dimnames=list(NULL,paste(1:19)))
+
+
+for(j in 1:k){
+  best_fit=regsubsets(Salary~.,data = Hitters[folds!=j,],nvmax=19)
+  
+  for(i in 1:19){
+    pred=predict_regsubsets(best_fit,Hitters[folds==j,],id=i)
+    cv_errors[j,i]=mean((Hitters$Salary[folds==j]-pred)^2)
+  }
+}
+
+
+
+```
+
+
+
+```{r}
+mean_cv_errors=apply(cv_errors, 2, mean)
+plot(mean_cv_errors,type="b")
+
+
+```
+
+
+#Ridge Regression and Lasso
+
+
+
+```{r}
+x=model.matrix(Salary~.,Hitters)[,-1]
+y=Hitters$Salary
+
+
+
+```
+
+model.matrix converts categorical variables into quantitative by making use of the dummy variables
+
+*Ridge Regression*
+
+```{r}
+
+grid=10^seq(10,-2,length=100)
+ridge_mod=glmnet(x,y,alpha=0,lambda = grid)
+
+ridge_mod$lambda[50]
+coef(ridge_mod)[,50]
+
+
+
+```
+
+Calculate l2 norm
+
+```{r}
+  
+sqrt(sum(coef(ridge_mod)[-1,50]^2))
+
+
+```
+
+The higher the lambda, shrunker are the coefficients and hence less the l2 
+Let us calculate for some other value of lambda 
+
+```{r}
+
+sqrt(sum(coef(ridge_mod)[-1,60]^2))
+
+```
+
+Can use the predict function too, we just have to use type="coefficients"
+
+```{r}
+predict(ridge_mod,type = "coefficients",s=50)[1:20,]
+
+```
+
+```{r}
+set.seed(1)
+train=sample(1:nrow(x),nrow(x)/2)
+test=-train
+y_test=y[test]
+
+```
+
+Fitting a ridge regression model
+
+```{r}
+ridge_mod=glmnet(x[train,],y[train],alpha=0,lambda = grid,thresh = 1e-12)
+ridge_pred=predict(ridge_mod,s=4,newx = x[test,])
+mean((ridge_pred-y_test)^2)
+
+```
+
+
+
+```{r}
+
+mean((mean(y[train])-y_test)^2)
+
+```
+
+
+
+```{r}
+#ridge_pred=predict(ridge_mod,s=0,newx = x[test,],exact = T)
+
+#mean((ridge_pred-y_test)^2)
+
+#lm(y~x,subset = train)
+
+#the following commands are not running 
+
+# predict(object = ridge_mod,s=0,exact = T,type="coefficients")
+
+# predict.glmnet(ridge_mod,s=0,exact = T,type="coefficients")[1:20,]
+
+```
+
+
+Using cross-validation to find the best value of lambda
+
+```{r}
+
+set.seed(1)
+cv_out=cv.glmnet(x[train,],y[train],alpha=0)
+
+plot(cv_out)
+bestlam=cv_out$lambda.min
+bestlam
+
+
+
+```
+
+The best lambda value is 212
+
+
+
+```{r}
+
+ridge_pred=predict(ridge_mod,s=bestlam,newx=x[test,])
+mean((ridge_pred-y_test)^2)
+
+
+```
+
+
+# Lasso Model
+
+```{r}
+lasso_mod=glmnet(x[train,],y[train],alpha=1,lambda=grid)
+plot(lasso_mod)
+
+```
+```{r}
+set.seed(1)
+cv_out=cv.glmnet(x[train,],y[train],alpha=1)
+plot(cv_out)
+bestlam=cv_out$lambda.min
+lasso_pred=predict(lasso_mod,s=bestlam,newx=x[test,])
+mean((lasso_pred-y_test)^2)
+
+
+
+
+```
+
+
+
+The mean error is comparable to the ridge but in the ridge the coefficients are shrunken but they are not made zero 
+
+```{r}
+out=glmnet(x,y,alpha=1,lambda = grid)
+lasso_coef=predict(out,type="coefficients",s=bestlam)[1:20,]
+
+lasso_coef
+
+```
+
+As we see that most of the coefs are made zero so it's easier to interpret
+
+
+#PCR and PLS
+
+```{r}
+set.seed(2)
+pcr_fit<-pcr(Salary~.,data=Hitters,scale=TRUE,validation="CV")
+summary(pcr_fit)
+
+
+validationplot(pcr_fit,val.type = "MSEP")
+
+```
+
+
+
+```{r}
+set.seed(1)
+
+pcr_fit<-pcr(Salary~.,data=Hitters,subset=train,scale=TRUE,validation="CV")
+validationplot(pcr_fit,val.type = "MSEP")
+
+pcr_fit=pcr(y~x,scale=TRUE,ncomp=7)
+summary(pcr_fit)
+
+
+
+```
+
+#Partial Least Squares
+
+
+```{r}
+
+set.seed(1)
+pls_fit=plsr(Salary~.,data=Hitters,subset=train,scale=TRUE,validation="CV")
+summary(pls_fit)
+
+
+```
+
+#Non-Linear Modelling 
+
+```{r}
+attach(Wage)
+fit=lm(wage~poly(age,4),data=Wage)
+coef(summary(fit))
+
+fit=lm(wage~poly(age,4,raw=T),data=Wage)
+coef(summary(fit))
+
+```
+
+Important: use the I() function if you want to type the exact poly. Example age^2 should be written as I(age^2)
+
+
+```{r}
+agelims=range(age)
+age_grid=seq(from=agelims[1],to=agelims[2])
+preds=predict(fit,newdata = list(age=age_grid),se=TRUE)
+se_bands=cbind(preds$fit+2*preds$se.fit,preds$fit-2*preds$se.fit)
+
+```
+
+```{r}
+par(mfrow=c(1,2),mar=c(4.5,4.5,1,1),oma=c(0,0,4,0))
+plot(age,wage,xlim=agelims,cex=.5,col="darkgrey")
+title("Degree - 4 Polynomial", outer = T)
+lines(age_grid,preds$fit,lwd=2,col="blue")
+matlines(age_grid,se_bands,lwd=1,col="blue",lty=3)
+
+
+```
+
+#How to determine what degree of polynomial to use ?
+
+The anova function works here like a charm because of its simplicity and efficacy
+
+The following code is slight different from the book. I created a function rather than typing in five lines of code.
+
+```{r}
+polynomial_R<-function(degree_i){
+ assign(paste("fit_",degree_i),lm(wage~poly(age,degree_i)),envir = parent.frame())
+}
+
+
+
+```
+
+Either I can call the function 5 times or I can run a for loop 
+
+
+```{r}
+for (i in 1:5){
+polynomial_R(i)
+    }
+
+```
+
+
+```{r}
+anova(`fit_ 1`,`fit_ 2`,`fit_ 3`,`fit_ 4`,`fit_ 5`)
+
+```
+
+
+```{r}
+fit<-glm(I(wage>250)~poly(age,4),data=Wage,family = binomial)
+preds=predict(fit,newdata = list(age=age_grid),se=T)
+
+```
+
+
+```{r}
+pfit=exp(preds$fit)/(1+exp(preds$fit))
+se_bands_logit=cbind(preds$fit+2*preds$se.fit,preds$fit-2*preds$se.fit)
+se_bands=exp(se_bands_logit)/(1+exp(se_bands_logit))
+
+
+preds=predict(fit,newdata=list(age=age_grid),type = "response",se=T)
+
+
+
+```
+
+
+
+```{r}
+plot(age,I(wage>250),xlim=agelims,type = "n",ylim=c(0,.2))
+points(jitter(age),I((wage>250)/5),cex=0.5,pch="|",col="darkgrey")
+lines(age_grid,pfit,lwd=2,col="blue")
+matlines(age_grid,se_bands,lwd=1,col="blue",lty=3)
+
+
+
+```
+
+```{r}
+table(cut(age,4))
+fit=lm(wage~cut(age,4),data=Wage)
+coef(summary(fit))
+
+```
+
+# Splines
+
+```{r}
+fit=lm(wage~bs(age,knots = c(25,40,60)),data=Wage)
+pred=predict(fit,newdata = list(age=age_grid),se=T)
+{plot(age,wage,col="gray")
+lines(age_grid,pred$fit,lwd=2)
+lines(age_grid ,pred$fit +2* pred$se ,lty ="dashed")
+lines(age_grid ,pred$fit -2* pred$se ,lty ="dashed")
+}
+```
+
+Fitting a natural spline
+
+```{r}
+fit2=lm(wage~ns(age,df=4),data=Wage)
+
+summary(fit2)
+
+#**********************WARNING*******************#
+
+#pred=predict(fit2,newdata=list(age_grid),se=T)
+#lines(age_grid,pred$fit,col="red",lwd=2)
+
+
+```
+
+I don't know why a vector of length 3000 is being generated when the predict function is applied to only a handful of values
+
+```{r}
+plot(age,wage,xlim=agelims,cex=0.5,col="darkgrey")
+title("Smoothing spline")
+fit=smooth.spline(age,wage,df=16)
+fit2=smooth.spline(age,wage,cv=TRUE)
+fit2$df
+lines(fit,col="red",lwd=2)
+lines(fit2,col="blue",lwd=2)
+legend("topright",legend=c("16 DF","6.8 DF"),col=c("red","blue"),lty=1,lwd=2,cex=0.8)
+
+
+
+
+```
+
+
+Loess or local regression. I would like to research the difference between local and segmented regression
+
+```{r}
+
+plot(age,wage,xlim=agelims,cex=0.5,col="darkgrey")
+title("Local Regression")
+fit=loess(wage~age,span = 0.2,data=Wage)
+fit2=loess(wage~age,span = 0.5,data=Wage)
+lines(age_grid,predict(fit,data.frame(age=age_grid)),col="red",lwd=2)
+lines(age_grid,predict(fit2,data.frame(age=age_grid)),col="blue",lwd=2)
+legend("topright",legend=c("Span=0.2","Span=0.5"),col=c("red","blue"),lty=1,lwd=2,cex=0.8)
+```
+
+#GAM
+
+Install gam and library(gam) at the top
+
+```{r}
+gam1=lm(wage~ns(year,4)+ns(age,5)+education,data = Wage)
+gam_m3=gam(wage~s(year,4)+s(age,5)+education,data = Wage)
+par(mfrow=c(1,3))
+plot(gam_m3,se=TRUE,col="blue")
+plot.Gam(gam1,se=TRUE,col="red")
+
+
+
+```
+
+
+
+```{r}
+gam_m1=gam(wage~s(age,5)+education, data=Wage)
+gam_m2=gam(wage~year+s(age,5)+education, data=Wage)
+anova(gam_m1,gam_m2,gam_m3,test = "F")
+
+```
+
+```{r}
+
+summary(gam_m3)
+
+```
+
+#Decision Trees
+
+```{r}
+attach(Carseats)
+High=ifelse(Sales<=8,"No","Yes")
+Carseats=data.frame(Carseats,High)
+
+
+```
+
+
+Fit a classification tree
+
+```{r}
+tree_carseats=tree(High~.-Sales,Carseats)
+summary(tree_carseats)
+
+```
+
+```{r}
+plot(tree_carseats)
+text(tree_carseats,pretty=0)
+
+```
+
+Compute the test error on the dataset
+
+```{r}
+set.seed(2)
+train=sample(1:nrow(Carseats),200)
+Carseats_test=Carseats[-train,]
+High_test=High[-train]
+tree_carseats=tree(High~.-Sales,Carseats,subset = train)
+tree_pred=predict(tree_carseats,Carseats_test,type = "class")
+table(tree_pred,High_test)
+```
+
+
+Prune the tree
+
+
+```{r}
+set.seed(3)
+cv_carseats=cv.tree(tree_carseats,FUN=prune.misclass)
+names(cv_carseats)
+  
+
+```
+
+```{r}
+par(mfrow=c(1,2))
+plot(cv_carseats$size,cv_carseats$dev,type="b")
+plot(cv_carseats$k,cv_carseats$dev,type="b")
+
+```
+
+```{r}
+prune_carseats=prune.misclass(tree_carseats,best=9)
+plot(prune_carseats)
+text(prune_carseats,pretty = 0)
+
+```
+
+
+After find the tree with the best k, we will use the predict function to find the accuracy of the tree
+
+```{r}
+tree_pred=predict(prune_carseats,Carseats_test,type="class")
+table(tree_pred,High_test)
+
+
+```
+
+#Fitting Regression Trees
+
+```{r}
+set.seed(1)
+train=sample(1:nrow(Boston),nrow(Boston)/2)
+tree_boston=tree(medv~.,Boston,subset = train)
+summary(tree_boston)
+
+
+```
+
+Note: In the context of regression tree, the deviance is simply the sum of squared errors for the tree
+
+
+```{r}
+plot(tree_boston)
+text(tree_boston,pretty = 0)
+
+```
+
+Cross-Validation 
+
+```{r}
+cv_boston<-cv.tree(tree_boston)
+plot(cv_boston$size,cv_boston$dev,type='b')
+
+```
+
+Prune tree
+
+```{r}
+prune_boston<-prune.tree(tree_boston,best=5)
+plot(prune_boston)
+text(prune_boston,pretty=0)
+
+```
+
+Predictions on the test set
+
+```{r}
+yhat=predict(tree_boston,newdata = Boston[-train,])
+boston_test=Boston[-train,"medv"]
+plot(yhat,boston_test)
+abline(0,1)
+mean((yhat-boston_test)^2)
+
+
+```
+
+#Bagging and Random Forests
+
+
+```{r}
+set.seed(1)
+bag_boston=randomForest(medv~.,data = Boston,subset = train,mtry=13,importance=TRUE)
+
+
+```
+
+Bagging Tree prediction on test set
+
+```{r}
+yhat_bag=predict(bag_boston,newdata=Boston[-train,])
+plot(yhat_bag,boston_test)
+abline(0,1)
+mean((yhat_bag-boston_test)^2)
+
+
+
+
+```
+
+
+In the book it is mentioned that p/3 variables are used in regression trees and square root of p are used for classification trees
+
+```{r}
+set.seed(1)
+rf_boston=randomForest(medv~.,data = Boston,subset = train,mtry=6,importance=TRUE)
+importance(rf_boston)
+varImpPlot(rf_boston)
+
+```
+
+
+#Boosting
+
+```{r}
+set.seed(1)
+boost_boston=gbm(medv~.,data=Boston[train,],distribution = "gaussian",n.trees = 5000,interaction.depth = 4)
+summary(boost_boston)
+
+```
+
+
+```{r}
+par(mfrow=c(1,2))
+plot(boost_boston,i="rm")
+plot(boost_boston,i="lstat")
+
+```
+
+```{r}
+boost_boston=gbm(medv~.,data=Boston[train,],n.trees = 5000,interaction.depth = 4,shrinkage = 0.2,verbose = F)
+yhat_boost=predict(boost_boston,newdata=Boston[-train,],n.trees = 5000)
+mean((yhat_boost-boston_test)^2)
+
+
+
+
+```
+
+
+#Support Vector Machines
+
+```{r}
+set.seed(1)
+x=matrix(rnorm(20*2),ncol=2)
+y=c(rep(-1,10),rep(1,10))
+x[y==1,]=x[y==1,]+1
+
+
+
+
+```
+
+
+```{r}
+plot(x,col=(3-y))
+```
+
+
+```{r}
+dat<-data.frame(x=x,y=as.factor(y))
+svmfit=svm(y~.,data=dat,kernel="linear",cost=10,scale=FALSE)
+plot(svmfit,dat)
+
+```
+
+Plot function is able to draw boundaries, color regions, mark boundaries, mark observations
+
+
+```{r}
+summary(svmfit)
+
+svmfit<-svm(y~.,data=dat,kernel="linear",cost=0.01,scale=FALSE)
+plot(svmfit,dat)
+
+```
+
+Cross-Validation. tune function helps you input different 
+
+```{r}
+set.seed(1)
+tune_out<-tune(svm,y~.,data=dat,kernel="linear",ranges=list(cost=c(0.001,0.01,0.1,1,5,10,100)))
+summary(tune_out)
+
+bestmod=tune_out$best.model
+
+
+```
+
+Generating the test data
+
+```{r}
+xtest=matrix(rnorm(20*2),ncol=2)
+ytest=sample(c(-1,1),20,rep=TRUE)
+xtest[ytest==1,]=xtest[ytest==1,]+1
+testdat=data.frame(x=xtest,y=as.factor(ytest))
+
+```
+
+Predictions on test data
+
+```{r}
+
+
+ypred=predict(bestmod,testdat)
+table(predict=ypred,truth=testdat$y)
+
+
+```
+
+
+Again separating the two classes 
+
+```{r}
+x[y==1,]=x[y==1,]+0.5
+plot(x,col=(y+5)/2,pch=19)
+
+
+```
+
+
+
+```{r}
+dat=data.frame(x=x,y=as.factor(y))
+svmfit=svm(y~.,data=dat,kernel="linear",cost=1e5)
+summary(svmfit)
+plot(svmfit,dat)
+
+
+
+```
+
+
+More cost , we allow more number of misclassifications and hence bigger the margin 
+  
+```{r}
+svmfit=svm(y~.,data=dat,kernel="linear",cost=1)
+summary(svmfit)
+plot(svmfit,dat)
+
+
+```
+
+
+```{r}
+set.seed(1)
+x=matrix(rnorm(200*2),ncol=2)
+x[1:100,]=x[1:100]+2
+x[101:150,]=x[101:150]-2
+y=c(rep(1,150),rep(2,50))
+dat=data.frame(x=x,y=as.factor(y))
+
+
+```
+
+
+```{r}
+plot(x,col=y)
+```
+
+
+```{r}
+train=sample(200,100)
+svmfit=svm(y~.,data=dat[train,],kernel="radial",gamma=1,cost=1)
+plot(svmfit,dat[train,])
+
+```
+
+
+```{r}
+summary(svmfit)
+
+```
+
+Increasing the value of cost term 
+
+```{r}
+svmfit<-svm(y~.,data=dat[train,],kernel="radial",gamma=1,cost=1e5)
+plot(svmfit,dat[train,])
+
+
+```
+
+Variation by cost and gamma
+
+```{r}
+set.seed(1)
+
+tune_out=tune(svm,y~.,data=dat[train,],kernel="radial",ranges = list(cost=c(0.1,1,10,100,1000),gamma=c(0.5,1,2,3,4)))
+
+summary(tune_out)
+
+```
+
+
+```{r}
+table(true=dat[-train,"y"],pred=predict(tune_out$best.model,newx=dat[-train,]))
+
+```
+
+#ROC Curves
+
+
+```{r}
+rocplot=function(pred,truth,...)
+  {
+  predob=prediction(pred,truth)
+  perf=performance(predob,"tpr","fpr")
+  plot(perf,...)
+ }
+  
+  
+  
+
+
+```
+
+
+
+
+```{r}
+svmfit_opt=svm(y~.,data = dat[train,],kernel="radial",gamma=2,cost=1,decision.values=T)
+fitted=attributes(predict(svmfit_opt,dat[train,],decision.values=TRUE))$decision.values
+
+par(mfrow=c(1,2))
+rocplot(fitted,dat[train,"y"],main="Training Data")
+
+
+svmfit_flex=svm(y~.,data=dat[train,],kernel="radial",gamma=50,cost=1,decision.values=T)
+fitted=attributes(predict(svmfit_flex,dat[train,],decision.values=TRUE))$decision.values
+rocplot(fitted,dat[train,"y"],add=T,col="red")
+
+```
+
+
+Predictions on the test set
+
+
+```{r}
+par(mfrow=c(1,2))
+
+fitted=attributes(predict(svmfit_opt,dat[-train,],decision.values=TRUE))$decision.values
+rocplot(fitted,dat[-train,"y"],main="Test Data")
+
+
+fitted=attributes(predict(svmfit_flex,dat[-train,],decision.values=TRUE))$decision.values
+rocplot(fitted,dat[-train,"y"],add=T,col="red")
+
+
+```
+
+
+#SVM with multiple classes
+
+Using one- versus all approach
+
+Generating the data
+
+```{r}
+set.seed(1)
+x=rbind(x,matrix(rnorm(50*2),ncol=2))
+y=c(y,rep(0,50))
+
+x[y==0,2]=x[y==0,2]+2
+dat=data.frame(x=x,y=as.factor(y))
+par(mfrow=c(1,1))
+plot(x,col=(y+1))
+
+
+
+```
+
+
+```{r}
+svmfit=svm(y~.,data=dat,kernel="radial",cost=10,gamma=1)
+plot(svmfit,dat)
+
+
+
+```
+
+Application to the Gene expression data
+
+
+```{r}
+names(Khan)
+
+
+
+```
+
+
+
+# Principal Component Analysis
+
+```{r}
+states=row.names(USArrests)
+states
+
+names(USArrests)
+
+apply(USArrests, 2, mean)
+
+pr_out<-prcomp(USArrests,scale. = TRUE)
+names(pr_out)
+
+
+
+```
+
+
+```{r}
+pr_out$center
+pr_out$scale
+
+
+```
+
+
+
+```{r}
+pr_out$rotation
+```
+
+
+```{r}
+pr_out$x
+
+```
+
+The x vector with it's loadings in different principal components
+
+```{r}
+biplot(pr_out,scale=0)
+```
+
+We will be calculating the amount of variance explained by each principal component 
+
+```{r}
+pr_out$sdev
+pr_var=pr_out$sdev^2
+pr_var
+
+pve=pr_var/sum(pr_var)
+
+
+```
+
+
+```{r}
+plot(pve,xlab="Principal Component",ylab="Proportion of Variance Explained",ylim=c(0,1),type="b")
+
+```
+
+
+#K-Means clustering 
+
+
+Generating the data
+
+```{r}
+set.seed(2)
+x=matrix(rnorm(50*2),ncol=2)
+x[1:25,1]=x[1:25,1]+3
+x[1:25,2]=x[1:25,2]-4
+
+```
+
+K-means clustering with K=2
+
+```{r}
+km_out=kmeans(x,2,nstart=20)
+plot(x,col=(km_out$cluster+1),main="K_means Clustering with x=2",pch=20,cex=2)
+```
+
+We generated the data so we know there are 2 groups. Let us try what would have happen if we have started with K=3 groups
+
+
+```{r}
+set.seed(4)
+km_out=kmeans(x,3,nstart=20)
+km_out
+
+```
+
+Hierarchical clustering
+
+
+```{r}
+hc_average<-hclust(dist(x),method = 'average')
+hc_single<-hclust(dist(x),method = 'single')
+hc_complete<-hclust(dist(x),method = 'complete')
+```
+
+
+
+```{r}
+par(mfrow=c(1,3))
+plot(hc_complete,cex=0.9)
+plot(hc_average,cex=0.9)
+plot(hc_single,cex=0.9)
+
+
+
+
+```
+Labelling
+
+```{r}
+
+cutree(hc_complete,2)
+cutree(hc_average,2)
+cutree(hc_single,2)
+
+```
+
+
+```{r}
+cutree(hc_single,4)
+
+
+```
+
+```{r}
+xsc=scale(x)
+plot(hclust(dist(xsc)))
+
+```
+
+
+Not only absolute distances we can also calculate distances based on correlation 
+
+
+```{r}
+x=matrix(rnorm(30*3),ncol=3)
+dd=as.dist(1-cor(t(x)))
+plot(hclust(dd,method='complete'),main="Complete Linkage With Correlation-Based distancec",xlab="",ylab="")
+
+
+
+```
+
+#NCI60 Data 
+
+
+
+```{r}
+nci_labs=NCI60$labs
+nci_data=NCI60$data
+
+```
+
+The data has 64 rows and columns >>>64
+This is a p>>>n problem
+
+PCA on the NCI60 data
+
+```{r}
+pr_out=prcomp(nci_data,scale=TRUE)
+Cols=function(vec)
+{
+  cols=rainbow(length(unique(vec)))
+  return(cols[as.numeric(as.factor(vec))])
+}
+
+```
+
+Plotting the first two principal components
+
+
+```{r}
+par(mfrow=c(1,2))
+
+plot(pr_out$x[,1:2],col=Cols(nci_labs),pch=19,xlab="Z1",ylab="Z2")
+plot(pr_out$x[,c(1,3)],col=Cols(nci_labs),pch=19,xlab="Z1",ylab="Z3")
+
+
+
+```
+[Copied]:
+
+This indicates that cell lines
+from the same cancer type tend to have pretty similar gene expression
+levels.
+
+
+```{r}
+summary(pr_out)
+plot(pr_out)
+```
+
+Scree-Plot. 
+
+pve stands for proportion of variance explained
+
+```{r}
+pve=100*pr_out$sdev^2/sum(pr_out$sdev^2)
+par(mfrow=c(1,2))
+
+plot(pve,type="o",ylab="PVE",xlab="Principal Component",col="blue")
+plot(cumsum(pve),type="o",ylab="Cumulative PVE",xlab="Principal Component",col="brown3")
+
+```
+
+
+# Hierarchical clustering 
+
+```{r}
+sd_data=scale(nci_data)
+par(mfrow=c(1,3))
+data_dist=dist(sd_data)
+
+plot(hclust(data_dist),labels = nci_labs,main = "Complete Linkage",xlab = "",sub="",ylab="")
+plot(hclust(data_dist,method="average"),labels = nci_labs,main = "Average Linkage",xlab = "",sub="",ylab="")
+plot(hclust(data_dist,method="single"),labels = nci_labs,main = "Single Linkage",xlab = "",sub="",ylab="")
+
+```
+
+
+```{r}
+hc_out=hclust(dist(sd_data))
+hc_clusters=cutree(hc_out,4)
+
+table(hc_clusters,nci_labs)
+
+```
+
+
+```{r}
+par(mfrow=c(1,1))
+plot(hc_out,labels = nci_labs)
+abline(h=139,col="red")
+```
+
+At height=139 we see the cluster is cut into 4 different clusters. In the book it is specifically menioned that performing a k-means clustering with k=4 is not the same as cutting a dendogram at our chosen height. The resulting clusters can be different.
+
+```{r}
+set.seed(2)
+km_out=kmeans(sd_data,4,nstart=20)
+km_clusters=km_out$cluster
+table(km_clusters,hc_clusters)
+```
+
+Another important line in the book was denoising the data by using only the first few principal component scores 
+
+```{r}
+hc_out=hclust(dist(pr_out$x[,1:5]))
+plot(hc_out,labels=nci_labs,main="Hier. Clust. on First Five score vectors")
+table(cutree(hc_out,4),nci_labs)
+
+
+```
+
+
+
