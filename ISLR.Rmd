@@ -2,7 +2,9 @@
 title: "ISLR"
 author: "Aadish"
 date: "August 6, 2018"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE,cache=TRUE}
@@ -63,7 +65,7 @@ vif(lm_fit)
 ```{r}
 
 lm_fit1<-lm(medv~lstat+I(lstat^2))
-summary(lm_fit)
+summary(lm_fit1)
 plot(lm_fit1)
 
 
